@@ -1,8 +1,15 @@
 import { useState } from "react";
 
 const dnesek = new Date();
+
 const formatDatum = (date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+
+const predchoziDen = (datumStr) => {
+  const d = new Date(datumStr);
+  d.setDate(d.getDate() - 1);
+  return formatDatum(d);
+};
 
 const mesice = ["Leden","Únor","Březen","Duben","Květen","Červen","Červenec","Srpen","Září","Říjen","Listopad","Prosinec"];
 const dnyTydne = ["Po","Út","St","Čt","Pá","So","Ne"];
@@ -14,8 +21,12 @@ export default function App() {
   const [kalendarRok, setKalendarRok] = useState(dnesek.getFullYear());
   const [kalendarMesic, setKalendarMesic] = useState(dnesek.getMonth());
 
-  // --- logika tasků ---
+  // tasky pro vybraný den
   const aktualniTasky = tasky[vybraneDatum] || [];
+
+  // nesplněné tasky z předchozího dne
+  const predchoziDatum = predchoziDen(vybraneDatum);
+  const nesplneneTasky = (tasky[predchoziDatum] || []).filter((t) => !t.hotovo);
 
   const pridejTask = () => {
     if (inputValue.trim() === "") return;
@@ -37,11 +48,9 @@ export default function App() {
     if (e.key === "Enter") pridejTask();
   };
 
-  // --- logika kalendáře ---
+  // --- kalendář ---
   const prvniDenMesice = new Date(kalendarRok, kalendarMesic, 1);
   const pocetDni = new Date(kalendarRok, kalendarMesic + 1, 0).getDate();
-
-  // pondělí = 0, ... neděle = 6
   let zacatekOffset = prvniDenMesice.getDay() - 1;
   if (zacatekOffset < 0) zacatekOffset = 6;
 
@@ -92,7 +101,7 @@ export default function App() {
                 style={{
                   ...styles.denBunka,
                   ...(jeDnes ? styles.dnesek : {}),
-                  ...(jeVybran ? styles.vybranDen : {}),
+                  ...(jeVybran && !jeDnes ? styles.vybranDen : {}),
                 }}
               >
                 {den}
@@ -121,8 +130,9 @@ export default function App() {
           <button style={styles.tlacitko} onClick={pridejTask}>Přidat</button>
         </div>
 
+        {/* aktuální tasky */}
         <div>
-          {aktualniTasky.length === 0 && (
+          {aktualniTasky.length === 0 && nesplneneTasky.length === 0 && (
             <p style={styles.prazdno}>Žádné tasky pro tento den.</p>
           )}
           {aktualniTasky.map((task) => (
@@ -139,6 +149,26 @@ export default function App() {
             </div>
           ))}
         </div>
+
+        {/* nesplněné z předchozího dne */}
+        {nesplneneTasky.length > 0 && (
+          <div style={styles.nesplneneBlok}>
+            <div style={styles.oddelovac}>
+              <span style={styles.oddelovacText}>Nesplněné z předchozích dnů</span>
+            </div>
+            {nesplneneTasky.map((task) => (
+              <div key={task.id} style={styles.nesplnenaPolozka}>
+                <input
+                  type="checkbox"
+                  style={styles.checkbox}
+                  checked={false}
+                  readOnly
+                />
+                <span style={styles.taskText}>{task.text}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -151,10 +181,9 @@ const styles = {
     display: "flex",
     flexDirection: "row",
     fontFamily: "'Segoe UI', sans-serif",
-    gap: "0",
   },
 
-  // --- kalendář ---
+  // kalendář
   kalendar: {
     width: "220px",
     minWidth: "220px",
@@ -229,7 +258,7 @@ const styles = {
     display: "block",
   },
 
-  // --- tasky ---
+  // tasky
   obsah: {
     flex: 1,
     padding: "60px 48px",
@@ -289,5 +318,35 @@ const styles = {
     color: "#bbb",
     fontSize: "14px",
     marginTop: "8px",
+  },
+
+  // nesplněné tasky
+  nesplneneBlok: {
+    marginTop: "8px",
+  },
+  oddelovac: {
+    display: "flex",
+    alignItems: "center",
+    margin: "16px 0 8px",
+    gap: "10px",
+  },
+  oddelovacText: {
+    fontSize: "11px",
+    color: "#aaa",
+    whiteSpace: "nowrap",
+    borderTop: "1px solid #e0e0e0",
+    paddingTop: "10px",
+    width: "100%",
+    letterSpacing: "0.03em",
+  },
+  nesplnenaPolozka: {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    padding: "10px 12px",
+    borderRadius: "8px",
+    backgroundColor: "#fdf6ec",
+    marginBottom: "6px",
+    borderLeft: "3px solid #f0c080",
   },
 };
