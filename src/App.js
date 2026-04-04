@@ -1,4 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  "https://zjoyamcimarfngsdctcc.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpqb3lhbWNpbWFyZm5nc2RjdGNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNTQ1MzEsImV4cCI6MjA5MDgzMDUzMX0.lyXYvc4_qEU8n1tV_zg8nZMg0MfXeltOJBElqr60ymM"
+);
 
 const dnesek = new Date();
 
@@ -20,22 +26,70 @@ export default function App() {
   const [vybraneDatum, setVybraneDatum] = useState(formatDatum(dnesek));
   const [kalendarRok, setKalendarRok] = useState(dnesek.getFullYear());
   const [kalendarMesic, setKalendarMesic] = useState(dnesek.getMonth());
+  const [nacitani, setNacitani] = useState(false);
 
-  // tasky pro vybraný den
   const aktualniTasky = tasky[vybraneDatum] || [];
-
-  // nesplněné tasky z předchozího dne
   const predchoziDatum = predchoziDen(vybraneDatum);
   const nesplneneTasky = (tasky[predchoziDatum] || []).filter((t) => !t.hotovo);
 
-  const pridejTask = () => {
+  // --- načtení tasků z DB při změně data ---
+  useEffect(() => {
+    const nactiTasky = async () => {
+      setNacitani(true);
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("*")
+        .eq("date", vybraneDatum)
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        console.error("Chyba při načítání:", error);
+      } else {
+        const upravene = data.map((t) => ({
+          id: t.id,
+          text: t.text,
+          hotovo: t.done,
+        }));
+        setTasky((prev) => ({ ...prev, [vybraneDatum]: upravene }));
+      }
+      setNacitani(false);
+    };
+
+    nactiTasky();
+  }, [vybraneDatum]);
+
+  // --- přidání tasku ---
+  const pridejTask = async () => {
     if (inputValue.trim() === "") return;
-    const novyTask = { id: Date.now(), text: inputValue.trim(), hotovo: false };
+
+    const { data, error } = await supabase
+      .from("tasks")
+      .insert([{ text: inputValue.trim(), done: false, date: vybraneDatum }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Chyba při přidávání:", error);
+      return;
+    }
+
+    const novyTask = { id: data.id, text: data.text, hotovo: data.done };
     setTasky({ ...tasky, [vybraneDatum]: [...aktualniTasky, novyTask] });
     setInputValue("");
   };
 
-  const prepniTask = (id) => {
+  // --- zaškrtnutí tasku ---
+  const prepniTask = async (id, aktualniHotovo) => {
+    const { error } = await supabase
+      .from("tasks")
+      .update({ done: !aktualniHotovo })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Chyba při aktualizaci:", error);
+      return;
+    }
+
     setTasky({
       ...tasky,
       [vybraneDatum]: aktualniTasky.map((t) =>
@@ -130,27 +184,29 @@ export default function App() {
           <button style={styles.tlacitko} onClick={pridejTask}>Přidat</button>
         </div>
 
-        {/* aktuální tasky */}
-        <div>
-          {aktualniTasky.length === 0 && nesplneneTasky.length === 0 && (
-            <p style={styles.prazdno}>Žádné tasky pro tento den.</p>
-          )}
-          {aktualniTasky.map((task) => (
-            <div key={task.id} style={styles.taskPolozka}>
-              <input
-                type="checkbox"
-                style={styles.checkbox}
-                checked={task.hotovo}
-                onChange={() => prepniTask(task.id)}
-              />
-              <span style={{ ...styles.taskText, ...(task.hotovo ? styles.hotovo : {}) }}>
-                {task.text}
-              </span>
-            </div>
-          ))}
-        </div>
+        {nacitani && <p style={styles.prazdno}>Načítám...</p>}
 
-        {/* nesplněné z předchozího dne */}
+        {!nacitani && (
+          <div>
+            {aktualniTasky.length === 0 && nesplneneTasky.length === 0 && (
+              <p style={styles.prazdno}>Žádné tasky pro tento den.</p>
+            )}
+            {aktualniTasky.map((task) => (
+              <div key={task.id} style={styles.taskPolozka}>
+                <input
+                  type="checkbox"
+                  style={styles.checkbox}
+                  checked={task.hotovo}
+                  onChange={() => prepniTask(task.id, task.hotovo)}
+                />
+                <span style={{ ...styles.taskText, ...(task.hotovo ? styles.hotovo : {}) }}>
+                  {task.text}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {nesplneneTasky.length > 0 && (
           <div style={styles.nesplneneBlok}>
             <div style={styles.oddelovac}>
@@ -182,8 +238,6 @@ const styles = {
     flexDirection: "row",
     fontFamily: "'Segoe UI', sans-serif",
   },
-
-  // kalendář
   kalendar: {
     width: "220px",
     minWidth: "220px",
@@ -257,8 +311,6 @@ const styles = {
     backgroundColor: "#888",
     display: "block",
   },
-
-  // tasky
   obsah: {
     flex: 1,
     padding: "60px 48px",
@@ -319,8 +371,6 @@ const styles = {
     fontSize: "14px",
     marginTop: "8px",
   },
-
-  // nesplněné tasky
   nesplneneBlok: {
     marginTop: "8px",
   },
